@@ -1,0 +1,253 @@
+---
+title: "PM 566 Assignment 1"
+author: "Erica Shin"
+format: html
+editor: visual
+embed-resources: true
+---
+
+## Step 1
+
+```{r}
+#2002
+old <- data.table::fread(file.path("~", "Downloads", "ad_viz_plotval_data.csv"))
+old <- as.data.frame(old)
+
+dim(old)
+head(old)
+tail(old)
+str(old)
+summary(old)
+mean(is.na(old$`Daily Mean PM2.5 Concentration`))
+summary(old$`Daily Mean PM2.5 Concentration`)
+
+#2022
+new <- data.table::fread(file.path("~", "Downloads", "ad_viz_plotval_data-2.csv"))
+new <- as.data.frame(new)
+
+dim(new)
+head(new)
+tail(new)
+str(new)
+summary(new)
+mean(is.na(new$`Daily Mean PM2.5 Concentration`))
+summary(new$`Daily Mean PM2.5 Concentration`)
+
+#finding total number of negative daily mean PM2.5 values
+length(new[new$`Daily Mean PM2.5 Concentration`<0,'Daily Mean PM2.5 Concentration'])
+#215 values
+```
+
+[**2002 data summary**]{.underline}:
+
+For the 2002 dataset, the dimensions are 15,976 rows (observations) by 22 columns (variables).
+
+No apparent data issues.
+
+[**2022 data summary**]{.underline}:
+
+For the 2022 dataset, the dimensions are 59,756 rows (observations) by 22 columns (variables).
+
+The daily mean PM2.5 concentration variable seems to have a negative minimum value of -6.7, which doesn't make sense. There are a total of 215 observations that have a negative daily mean PM 2.5 concentration value.
+
+[**Both 2002 and 2022 dataset findings:**]{.underline}
+
+Both datasets have three types of variables: character, integer, and numeric.
+
+Character variable names: date, source, units, local site name, AQS parameter description, method description, CBSA name, state, county
+
+Integer variable names: site ID, POC, daily AQI value, daily obs count, AQS parameter code, method code. CBSA code, state FIPS code, county FIPS code
+
+Numerical variable names: daily mean PM2.5 concentration, percent complete, site latitude, site longitude
+
+## Step 2
+
+```{r}
+#combining two years into one data frame
+both <- rbind(old, new)
+dim(both)
+
+#creating new column for year
+both$Year <- format(as.Date(both$Date, format="%m/%d/%Y"),"%Y")
+
+#changing names of key variables
+names(both)[names(both) == "Daily Mean PM2.5 Concentration"] <- "pm2.5mean"
+
+names(both)[names(both) == "Site Latitude"] <- "lat"
+
+names(both)[names(both) == "Site Longitude"] <- "lon"
+```
+
+## Step 3
+
+```{r}
+library(leaflet)
+
+old2 <- both[both$Year == 2002, ]
+new2 <- both[both$Year == 2022, ]
+
+#one map with both years
+leaflet() %>%
+  addProviderTiles('OpenStreetMap') %>% 
+  addCircles(
+    data = old2,
+    lat=~lat,lng=~lon, popup = "2002",
+    opacity=1, fillOpacity=1, radius=100, color = "blue") %>%
+  addCircles(
+    data = new2,
+    lat=~lat,lng=~lon, popup = "2022",
+    opacity=1, fillOpacity=1, radius=100, color = "red")
+
+#separate map for 2002
+leaflet() %>%
+  addProviderTiles('OpenStreetMap') %>% 
+  addCircles(
+    data = old2,
+    lat=~lat,lng=~lon, popup = "2002",
+    opacity=1, fillOpacity=1, radius=100, color = "blue")
+
+#separate map for 2022
+leaflet() %>%
+  addProviderTiles('OpenStreetMap') %>% 
+  addCircles(
+    data = new2,
+    lat=~lat,lng=~lon, popup = "2022",
+    opacity=1, fillOpacity=1, radius=100, color = "red")
+
+```
+
+**Summary of spatial distribution:**
+
+The leaflet maps indicate that there are more data points for 2022 (red) than for 2002 (blue). For both 2002 and 2022, the data points are distributed throughout California, with clusters around Los Angeles and the Bay Area. Compared to the 2022 data, the 2002 data points are sparser - especially in the central area.
+
+#Summarize the spatial distribution of the monitoring sites??
+
+#might help to make two maps, one for each year because a lot of the stations haven't moved
+
+## Step 4
+
+```{r}
+sum(is.na(both$pm2.5mean))
+#there are 0 missing values of PM 2.5
+
+both <- both[!is.na(both$pm2.5mean), ]
+
+both <- both[order(both$pm2.5mean), ]
+
+head(both)
+
+summary(both$pm2.5mean)
+
+library(dplyr)
+
+#dataset with only negative mean PM2.5 values
+neg <- both[both$pm2.5mean < 0, ]
+
+summary(neg)
+
+library(ggplot2)
+
+#exploring proportion of neg mean PM 2.5 values
+neg |> 
+  ggplot() +
+  geom_bar(mapping=aes(x=pm2.5mean, y=stat(prop)))
+
+neg |> 
+  ggplot() +
+  geom_bar(mapping=aes(x=pm2.5mean, color=Date))
+
+neg$Month <- format(as.Date(neg$Date, format="%m/%d/%Y"),"%m")
+
+neg |> 
+  ggplot() +
+  geom_bar(mapping=aes(x=pm2.5mean, y=stat(prop), color=Month))
+
+neg |> 
+  ggplot() +
+  geom_boxplot(mapping=aes(x=Month, y=pm2.5mean))
+#shows widest boxplot comes from September 2022
+
+#want to see if they came from a single day or were evenly distributed across timeframe
+
+```
+
+There are no missing values for the mean PM 2.5 concentration in the combined dataset.
+
+There are 215 implausible values in the combined dataset. They are negative values, which is implausible since it doesn't make sense for the mean PM 2.5 concentration to be negative.
+
+Plotting the proportions of the 215 negative/implausible values via barplot shows that most of the values are between -2 and 0. The barplot of negative PM 2.5 mean values shows a left-skewed distribution. Plotting the 215 negative values via boxplot shows that the widest range (of boxplot) comes from September 2022.
+
+## Step 5
+
+```{r}
+library(ggplot2)
+
+#state line plot
+plot(both$Year, both$pm2.5mean, col = factor(both$State))
+
+#plot(old2$pm2.5mean, col = factor(old2$State))
+old_hist_state <- hist(old2$pm2.5mean, col = factor(old2$State))
+new_hist_state <- hist(new2$pm2.5mean, col = factor(new2$State))
+#plot_grid
+
+#state geom line plot
+both[!is.na(pm2.5mean)] |>
+  ggplot(data=both, mapping=aes(x=Year, y=pm2.5mean, color=State)) +
+  geom_point() +
+  geom_smooth()
+
+#state boxplot
+both[!is.na(pm2.5mean)] |>
+  ggplot(data=both, mapping=aes(x=Year, y=pm2.5mean, fill=State)) +
+  geom_boxplot()
+
+#county line plot
+plot(both$Year, both$pm2.5mean, col = factor(both$County))
+
+#county geom line plot
+both[!is.na(pm2.5mean)] |>
+  ggplot(data=both, mapping=aes(x=Year, y=pm2.5mean, color=County)) +
+  geom_point() +
+  geom_smooth()
+
+#county boxplot
+both[!is.na(pm2.5mean)] |>
+  ggplot(data=both, mapping=aes(x=Year, y=pm2.5mean, fill=County)) +
+  geom_boxplot()
+
+#site in LA
+both_la <- both[both$County == 'Los Angeles', ]
+
+plot(both$Year, both$pm2.5mean, col = factor(both_la$County))
+
+#all boxplots
+ggplot(data=both, aes(x=Year, y=pm2.5mean)) +
+  geom_boxplot(aes(fill=State), width=0.8) + theme_bw()
+
+ggplot(data=both, aes(x=Year, y=pm2.5mean)) +
+  geom_boxplot(aes(fill=County), width=0.8) + theme_bw()
+
+ggplot(data=both_la, aes(x=Year, y=pm2.5mean)) +
+  geom_boxplot(aes(fill=County), width=0.8) + theme_bw()
+
+
+#boxplot(both$pm2.5mean ~ both$Year, col=factor(both$State))
+
+
+#take average at the county level. taking average within groups and then put into barplots
+
+#do I remove implausible values or keep them?? –> remove them
+
+```
+
+**State**:
+
+Compared to the data from 2002, the 2022 data points have a narrower interquartile range (IQR) and lower median. However, the 2022 data points have a wider overall range with a much higher maximum value (around 300) and lower minimum value (below 0 -\> the implausible values). At the state level, the data shows that the daily concentrations of PM 2.5 may have decreased in California over the last 20 years (from 2002 to 2022) but there are more outliers and there is a wider range in 2022.
+
+**County**:
+
+Compared to the data from 2002, the 2022 data points seem to have lower interquartile ranges (IQR) overall. However, the 2022 data points have a wider overall range with much higher maximum values (around 300) and lower minimum values (below 0 -\> the implausible values). At the county level, the data shows that the daily concentrations of PM 2.5 may have decreased in California over the last 20 years (from 2002 to 2022) but there are more outliers and there is a wider range in 2022.
+
+**Site in Los Angeles**:
+
+Compared to the data from 2002, the 2022 data points have a narrower interquartile range (IQR) and lower median. Also, the 2002 data points have a wider overall range with a much higher maximum value (around 80) and lower minimum value (around 0). For sites in Los Angeles, the data shows that the daily concentrations of PM 2.5 have decreased in California over the last 20 years (from 2002 to 2022).

@@ -98,6 +98,8 @@ leaflet() %>%
     lat=~lat,lng=~lon, popup = "2022",
     opacity=1, fillOpacity=1, radius=100, color = "red")
 
+#might help to make two maps, one for each year because a lot of the stations haven't moved
+
 #separate map for 2002
 leaflet() %>%
   addProviderTiles('OpenStreetMap') %>% 
@@ -119,10 +121,6 @@ leaflet() %>%
 **Summary of spatial distribution:**
 
 The leaflet maps indicate that there are more data points for 2022 (red) than for 2002 (blue). For both 2002 and 2022, the data points are distributed throughout California, with clusters around Los Angeles and the Bay Area. Compared to the 2022 data, the 2002 data points are sparser - especially in the central area.
-
-#Summarize the spatial distribution of the monitoring sites??
-
-#might help to make two maps, one for each year because a lot of the stations haven't moved
 
 ## Step 4
 
@@ -150,7 +148,7 @@ library(ggplot2)
 #exploring proportion of neg mean PM 2.5 values
 neg |> 
   ggplot() +
-  geom_bar(mapping=aes(x=pm2.5mean, y=stat(prop)))
+  geom_bar(mapping=aes(x=pm2.5mean, y=after_stat(prop)))
 
 neg |> 
   ggplot() +
@@ -160,7 +158,12 @@ neg$Month <- format(as.Date(neg$Date, format="%m/%d/%Y"),"%m")
 
 neg |> 
   ggplot() +
-  geom_bar(mapping=aes(x=pm2.5mean, y=stat(prop), color=Month))
+  geom_bar(mapping=aes(x=pm2.5mean, y=after_stat(prop), color=Month))
+
+neg |> 
+  ggplot() +
+  geom_bar(mapping=aes(x=Month, y=pm2.5mean), stat="identity")
+#shows greatest negative pm2.5mean value comes from September 2022
 
 neg |> 
   ggplot() +
@@ -175,22 +178,24 @@ There are no missing values for the mean PM 2.5 concentration in the combined da
 
 There are 215 implausible values in the combined dataset. They are negative values, which is implausible since it doesn't make sense for the mean PM 2.5 concentration to be negative.
 
-Plotting the proportions of the 215 negative/implausible values via barplot shows that most of the values are between -2 and 0. The barplot of negative PM 2.5 mean values shows a left-skewed distribution. Plotting the 215 negative values via boxplot shows that the widest range (of boxplot) comes from September 2022.
+Plotting the proportions of the 215 negative/implausible values via barplot shows that most of the values are between -2 and 0. The barplot of negative PM 2.5 mean values shows a left-skewed distribution. Plotting the 215 negative values via boxplot shows that the widest range (of boxplot) comes from September 2022. A bar plot also shows that the greatest negative PM 2.5 mean value comes from September 2022.
 
 ## Step 5
 
 ```{r}
 library(ggplot2)
 
-#state line plot
+#removing 215 implausible/negative values
+both <- both[both$pm2.5mean >= 0, ]
+
+#state scatter plot
 plot(both$Year, both$pm2.5mean, col = factor(both$State))
 
 #plot(old2$pm2.5mean, col = factor(old2$State))
 old_hist_state <- hist(old2$pm2.5mean, col = factor(old2$State))
 new_hist_state <- hist(new2$pm2.5mean, col = factor(new2$State))
-#plot_grid
 
-#state geom line plot
+#state geom scatter plot
 both[!is.na(pm2.5mean)] |>
   ggplot(data=both, mapping=aes(x=Year, y=pm2.5mean, color=State)) +
   geom_point() +
@@ -201,10 +206,10 @@ both[!is.na(pm2.5mean)] |>
   ggplot(data=both, mapping=aes(x=Year, y=pm2.5mean, fill=State)) +
   geom_boxplot()
 
-#county line plot
+#county scatter plot
 plot(both$Year, both$pm2.5mean, col = factor(both$County))
 
-#county geom line plot
+#county geom scatter plot
 both[!is.na(pm2.5mean)] |>
   ggplot(data=both, mapping=aes(x=Year, y=pm2.5mean, color=County)) +
   geom_point() +
@@ -235,8 +240,12 @@ ggplot(data=both_la, aes(x=Year, y=pm2.5mean)) +
 
 
 #take average at the county level. taking average within groups and then put into barplots
+cnty <- both |>
+  group_by(Year, County) |>
+  summarize(avg_pm2.5mean = mean(pm2.5mean, na.rm=TRUE))
 
-#do I remove implausible values or keep them?? –> remove them
+ggplot(data=cnty, aes(x=Year, y=avg_pm2.5mean, fillCounty)) +
+  geom_boxplot()
 
 ```
 
@@ -250,4 +259,4 @@ Compared to the data from 2002, the 2022 data points seem to have lower interqua
 
 **Site in Los Angeles**:
 
-Compared to the data from 2002, the 2022 data points have a narrower interquartile range (IQR) and lower median. Also, the 2002 data points have a wider overall range with a much higher maximum value (around 80) and lower minimum value (around 0). For sites in Los Angeles, the data shows that the daily concentrations of PM 2.5 have decreased in California over the last 20 years (from 2002 to 2022).
+Compared to the data from 2002, the 2022 data points have a narrower interquartile range (IQR) and lower median. Also, the 2002 data points have a wider overall range with higher maximum values (around 80) while the 2022 data points have slightly lower minimum values. For sites in Los Angeles, the data shows that the daily concentrations of PM 2.5 have generally decreased in California over the last 20 years (from 2002 to 2022).

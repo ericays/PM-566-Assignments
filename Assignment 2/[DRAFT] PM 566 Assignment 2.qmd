@@ -1,0 +1,503 @@
+---
+title: "[DRAFT] PM 566 Assignment 2"
+author: "Erica Shin"
+format: html
+editor: visual
+embed-resources: true
+---
+
+## [Data Wrangling]{.underline}
+
+**Question 1:**
+
+```{r}
+library(dplyr)
+
+#loading in datasets
+individ <- read.csv("/Users/ericashin/Documents/GitHub/PM-566-Assignments/Assignment 2/chs_individual.csv")
+
+region <- read.csv("/Users/ericashin/Documents/GitHub/PM-566-Assignments/Assignment 2/chs_regional.csv")
+
+#merging the two datasets
+both <- merge(individ, region, by="townname")
+
+#checking for duplicates
+nrow(individ)
+nrow(region)
+nrow(both)
+
+unique_both <- unique(both)
+
+#imputing first try
+imputed <- both |>
+  group_by(male, hispanic) |>
+  mutate(across(where(is.numeric),
+         ~ ifelse(is.na(.), mean(., na.rm=TRUE), .), .names = "{col}_imp")) |>
+  mutate(across(where(is.factor) | where(is.character),
+          ~ ifelse(is.na(.), names(sort(table(.), decreasing=TRUE))[1], .), .names= "{col}_imp")) |>
+  ungroup()
+
+#again with binary options
+imputed <- both |>
+  group_by(male, hispanic) |>
+  mutate(across(where(is.numeric) & !where(~ all(. %in% c(0, 1))),
+                ~ ifelse(is.na(.), mean(., na.rm = TRUE), .), .names = "{col}_imp")) |>
+  mutate(across(where(is.factor) | where(is.character) | where(~ all(. %in% c(0, 1))),
+                ~ ifelse(is.na(.), names(sort(table(.), decreasing = TRUE))[1], .), .names = "{col}_imp")) |>
+  ungroup()
+
+
+#FINAL IMPUTING CODE
+
+#creating function to get mode
+get_mode <- function(x) {
+  uniq_x <- unique(x[!is.na(x)])  #removing NA values
+  uniq_x[which.max(tabulate(match(x, uniq_x)))]  #finding mode
+}
+
+#imputing missing values
+imputed <- both |>
+  group_by(male, hispanic) |>
+  mutate(across(where(is.numeric),
+         ~ coalesce(., mean(., na.rm = TRUE)), .names = "{col}_imp")) |>
+  mutate(across(where(is.integer) | where(is.character),
+          ~ coalesce(., get_mode(.)), .names = "{col}_imp")) |>
+  ungroup()
+
+#imputing missing values (BEFORE)
+imputed <- both |>
+  group_by(male, hispanic) |>
+  mutate(across(where(is.numeric),
+         ~ ifelse(is.na(.), mean(., na.rm = TRUE), .), .names = "{col}_imp")) |>
+  mutate(across(where(is.integer) | where(is.character),
+          ~ ifelse(is.na(.), get_mode(.), .), .names = "{col}_imp")) |>
+  ungroup()
+
+#dropping unnecessary columns (double imp)
+imputed <- imputed |> select(-sid_imp_imp, -active_asthma_imp_imp, -pets_imp_imp)
+
+#double checking with asthma
+imputed[, c("asthma", "asthma_imp")]
+
+# double checking
+# > sum(is.na(both$male))
+# [1] 0
+# > sum(is.na(both$hispanic))
+# [1] 0
+# > sum(is.na(both$asthma))
+# [1] 31
+# > sum(is.na(imputed$asthma_imp))
+# [1] 0
+# > sum(is.na(imputed$asthma))
+# [1] 31
+
+#double checking with fev
+#creating table with all observations that have any missing values
+observations_with_na <- both %>%
+  filter(if_any(everything(), is.na))  #selecting rows where any column is NA
+
+# View the resulting table
+print(observations_with_na)
+selected_columns <- observations_with_na[, c("fev", "fev_imp")]
+
+# View the resulting data frame
+print(selected_columns)
+
+#filtering for rows where 'fev' is NA and selecting 'fev' and 'fev_imp'
+result <- imputed[is.na(imputed$fev), c("fev", "fev_imp")]
+
+#viewing the result
+print(result)
+
+
+# delete below code
+
+# Create a table with columns that have any missing values
+columns_with_na <- both |>
+  select(where(~ any(is.na(.))))  # Select columns with any NAs
+
+# View the resulting table
+print(columns_with_na)
+
+```
+
+There are no duplicates after merging the individual and regional datasets. The dimensions of the individual dataset are 1200 rows by 27 columns while the regional dataset has 12 rows by 27 columns. The dimensions of the merged dataset are 1200 rows by 49 columns. Since the number of rows for the merged dataset is not greater than 1200, it looks like there are no duplicates.
+
+**Question 2:**
+
+```{r}
+#creating new category called obesity_level
+imputed <- imputed |>
+  mutate(obesity_level = case_when(
+    bmi_imp < 14 ~ "Underweight",
+    bmi_imp >= 14 & bmi_imp <= 22 ~ "Normal",
+    bmi_imp > 22 & bmi_imp <= 24 ~ "Overweight",
+    bmi_imp > 24 ~ "Obese",
+    TRUE ~ NA_character_  # Handle NA cases if needed
+  ))
+
+#creating summary table
+summary_table <- imputed |>
+  group_by(obesity_level) |>
+  summarize(
+    min_bmi = min(bmi_imp, na.rm = TRUE),
+    max_bmi = max(bmi_imp, na.rm = TRUE),
+    total_obs = n()
+  )
+
+summary_table
+```
+
+Question 3:
+
+```{r}
+#creating new categorical variable called smoke_gas_exposure
+imputed <- imputed |>
+  mutate(smoke_gas_exposure = case_when(
+    smoke_imp == 0 & gasstove_imp == 0 ~ "No Exposure",
+    smoke_imp == 1 & gasstove_imp == 0 ~ "Second Hand Smoke Only",
+    smoke_imp == 0 & gasstove_imp == 1 ~ "Gas Stove Only",
+    smoke_imp == 1 & gasstove_imp == 1 ~ "Both Exposures",
+    TRUE ~ NA_character_  #handling NA cases if needed
+  ))
+
+#making table to check distribution
+table(imputed$smoke_gas_exposure)
+```
+
+Question 4:
+
+```{r}
+#summary table by town
+summary_town <- imputed |>
+  group_by(townname_imp) |>
+  summarize(
+    mean_fev = mean(fev_imp, na.rm = TRUE),
+    sd_fev = sd(fev_imp, na.rm = TRUE),
+    total_obs = n()
+  )
+
+#summary table by sex
+summary_sex <- imputed |>
+  group_by(male_imp) |> #### need male_imp
+  summarize(
+    mean_fev = mean(fev_imp, na.rm = TRUE),
+    sd_fev = sd(fev_imp, na.rm = TRUE),
+    total_obs = n()
+  )
+
+#summary table by obesity level
+summary_obesity <- imputed |>
+  group_by(obesity_level) |>
+  summarize(
+    mean_fev = mean(fev_imp, na.rm = TRUE),
+    sd_fev = sd(fev_imp, na.rm = TRUE),
+    total_obs = n()
+  )
+
+#summary table by smoke gas exposure
+summary_smoke_gas <- imputed |>
+  group_by(smoke_gas_exposure) |>
+  summarize(
+    mean_fev = mean(fev_imp, na.rm = TRUE),
+    sd_fev = sd(fev_imp, na.rm = TRUE),
+    total_obs = n()
+  )
+
+summary_town
+summary_sex
+summary_obesity
+summary_smoke_gas
+```
+
+## [Looking at the Data (EDA)]{.underline}
+
+**Following EDA checklist for overall datset**
+
+```{r}
+## EDA checklist for overall dataset "imputed"
+
+#reading in the data
+imputed
+
+#checking size of data
+dim(imputed)
+
+#examining the variables and their types
+
+str(imputed)
+summary(imputed)
+
+#looking at the top and bottom of the data
+head(imputed)
+tail(imputed)
+
+```
+
+**Question 1:** What is the association between BMI and FEV (forced expiratory volume)?
+
+```{r}
+#loading in ggplot
+library(ggplot2)
+
+bmi_fev <- imputed[order(imputed$bmi_imp), c("townname", "sid", "bmi_imp", "fev_imp")]
+
+#scatterplot for bmi and fev
+plot(bmi_fev$bmi_imp, bmi_fev$fev_imp)
+
+#ggplot scatterplot
+bmi_fev[!is.na("bmi_imp") & !is.na("fev_imp")] |> 
+ggplot(mapping=aes(x = bmi_imp, y = fev_imp)) +
+  geom_point(alpha = 0.7, color = "darkgreen") +
+  geom_smooth(method = "lm", color = "pink", se = FALSE) +
+  labs(title = "Association between BMI and FEV",
+       x = "Body Mass Index (BMI)",
+       y = "Forced Expiratory Volume (FEV)") +
+  theme_minimal()
+```
+
+In the scatter plot of BMI and FEV, the regression line (pink) slopes upward. This suggests a direct/positive relationship between the two variables. In other words, higher BMI is associated with higher FEV.
+
+***##what do we do to assess association??***
+
+**Question 2:** What is the association between smoke/gas exposure and FEV?
+
+```{r}
+sg_fev <- imputed[order(imputed$smoke_gas_exposure), c("townname", "sid", "smoke_gas_exposure", "fev_imp")]
+
+#ggplot scatterplot
+sg_fev[!is.na("smoke_gas_exposure") & !is.na("fev_imp")] |> 
+ggplot(mapping=aes(x = smoke_gas_exposure, y = fev_imp)) +
+  geom_point(alpha = 0.7, color = "darkgreen") +
+  geom_smooth(method = "lm", color = "pink", se = FALSE) +
+  labs(title = "Association between Smoke/Gas Exposure and FEV",
+       x = "Smoke/Gas Exposure",
+       y = "Forced Expiratory Volume (FEV)") +
+  theme_minimal()
+
+#ggplot boxplot
+sg_fev[!is.na("smoke_gas_exposure") & !is.na("fev_imp")] |> 
+ggplot(mapping=aes(x = smoke_gas_exposure, y = fev_imp)) +
+  geom_boxplot(alpha = 0.7, fill = "darkgreen") +
+  geom_smooth(method = "lm", aes(group = smoke_gas_exposure), color = "pink", se = FALSE) +
+  labs(title = "Association between Smoke/Gas Exposure and FEV",
+       x = "Smoke/Gas Exposure",
+       y = "Forced Expiratory Volume (FEV)") +
+  theme_minimal()
+```
+
+The association between smoke and gas exposure and FEV is
+
+***\## don't get regression line in plot???***
+
+**Question 3:** What is the association between PM2.5 exposure and FEV?
+
+```{r}
+#see what each pm25 column is
+pm25_list <- imputed |> select(contains("pm25"))
+
+pm25_fev <- imputed[order(imputed$pm25_mass_imp), c("townname", "sid", "pm25_mass_imp", "fev_imp")]
+
+#ggplot scatterplot
+pm25_fev[!is.na("pm25_mass_imp") & !is.na("fev_imp")] |> 
+ggplot(mapping=aes(x = pm25_mass_imp, y = fev_imp)) +
+  geom_point(alpha = 0.7, color = "darkgreen") +
+  geom_smooth(method = "lm", color = "pink", se = FALSE) +
+  labs(title = "Association between Smoke/Gas Exposure and FEV",
+       x = "PM2.5 Mass (µg/m³)",
+       y = "Forced Expiratory Volume (FEV)") +
+  theme_minimal()
+```
+
+In the scatter plot of PM 2.5 mass and FEV, the regression line (pink) slopes downward. This suggests an inverse relationship between the two variables. In other words, higher PM 2.5 mass is associated with lower FEV.
+
+***##which pm25 value do we use??***
+
+## [Visualization]{.underline}
+
+**Question 1:** Facet plot showing scatterplots with regression lines of BMI vs FEV by “townname”.
+
+```{r}
+imputed[!is.na("townname_imp")] |>
+  ggplot(mapping=aes(x=bmi_imp, y=fev_imp, color=townname_imp)) +
+  geom_point() +
+  facet_wrap(~ townname_imp, nrow=4) +
+  geom_smooth(method = "lm", se = FALSE, col="black") +
+  labs(title = "BMI vs FEV by Town Name (Facet Scatter Plots)", 
+       x = "Body Mass Index (BMI)", 
+       y = "Forced Expiratory Volumne (FEV)", 
+       color = "Town Name")
+```
+
+**Question 2:** Stacked histograms of FEV by BMI category and FEV by smoke/gas exposure. Use different color schemes than the ggplot default.
+
+```{r}
+#stacked histograms of FEV by BMI Category (obesity_level)
+imputed[!is.na("obesity_level")] |>
+ggplot(mapping=aes(x = fev_imp, fill = obesity_level)) +
+  geom_histogram(position = "stack", bins = 30, alpha = 0.7) +
+  labs(title = "Stacked Histograms of FEV by BMI Category",
+       x = "Forced Expiratory Volumne (FEV)",
+       y = "Count",
+       fill = "BMI Category") +
+  scale_fill_viridis_d()
+
+#stacked histograms of FEV by smoke/gas exposure
+imputed[!is.na("smoke_gas_exposure")] |>
+ggplot(mapping=aes(x = fev_imp, fill = smoke_gas_exposure)) +
+  geom_histogram(position = "stack", bins = 30, alpha = 0.7) +
+  labs(title = "Stacked Histograms of FEV by Smoke/Gas Exposure",
+       x = "Forced Expiratory Volumne (FEV)",
+       y = "Count",
+       fill = "Smoke Gas Exposure Levels") +
+  scale_fill_viridis_d()
+```
+
+**Question 3:** Barchart of BMI by smoke/gas exposure.
+
+```{r}
+imputed[!is.na("bmi_imp")] |>
+  ggplot() +
+  geom_bar(mapping=aes(x=bmi_imp, color=smoke_gas_exposure, fill=smoke_gas_exposure)) +
+  labs(title = "Barchart of BMI by Smoke/Gas Exposure",
+       x = "Body Mass Index (BMI)",
+       y = "Smoke Gas Exposure",
+       color = "Smoke Gas Exposure Levels",
+       fill = "Smoke Gas Exposure Levels")
+
+imputed[!is.na("bmi_imp")] |>
+  ggplot() +
+  geom_bar(mapping=aes(x=smoke_gas_exposure, fill=smoke_gas_exposure)) +
+  labs(title = "Barchart of BMI by Smoke/Gas Exposure",
+       x = "Smoke Gas Exposure",
+       y = "Body Mass Index (BMI)",
+       fill = "Smoke Gas Exposure Levels")
+
+imputed[!is.na("bmi_imp")] |>
+    ggplot(mapping=aes(x=bmi_imp, y=smoke_gas_exposure, fill=smoke_gas_exposure)) +
+    geom_bar(stat="identity") +
+    labs(title = "Barchart of BMI by Smoke/Gas Exposure",
+         x = "Body Mass Index (BMI)",
+         y = "Smoke Gas Exposure",
+         fill = "Smoke Gas Exposure Levels")
+
+#almost final barchart
+imputed[!is.na("bmi_imp")] |>
+    ggplot(mapping=aes(x=smoke_gas_exposure, y=bmi_imp, fill=smoke_gas_exposure)) +
+    geom_bar(stat="identity") +
+    labs(title = "Barchart of BMI by Smoke/Gas Exposure",
+         x = "Smoke Gas Exposure",
+         y = "Body Mass Index (BMI)",
+         fill = "Smoke Gas Exposure Levels")
+
+#ACTUAL final barchart
+imputed[!is.na(imputed$bmi_imp), ] |> 
+  ggplot(mapping = aes(x = smoke_gas_exposure, fill = smoke_gas_exposure)) +
+  geom_bar(stat = "count") +
+  labs(title = "Count of BMI Observations by Smoke/Gas Exposure Barchart",
+       x = "Smoke Gas Exposure",
+       y = "Count",
+       fill = "Smoke Gas Exposure Levels") +
+  theme_minimal()
+
+#using obesity level for BMI
+imputed[!is.na("obesity_level")] |>
+  ggplot() +
+  geom_bar(mapping=aes(x=obesity_level, fill=smoke_gas_exposure)) +
+  labs(title = "Barchart of BMI Level by Smoke/Gas Exposure",
+       x = "BMI Level",
+       y = "Count",
+       fill = "Smoke Gas Exposure Levels")
+```
+
+***##should the barchart show COUNT of BMI observations by smoke/gas exposure??***
+
+**Question 4:** Statistical summary graphs of FEV by BMI and FEV by smoke/gas exposure category.
+
+```{r}
+#statistical summary graph of FEV by BMI
+imputed[!is.na("fev_imp") & !is.na("bmi_imp")] |> 
+  ggplot() +
+  stat_summary(mapping=aes(x=fev_imp, y=bmi_imp),
+               fun.min = min,
+               fun.max = max,
+               fun = median) +
+  labs(title = "Statistical Summary Graph of FEV by BMI",
+       x = "Forced Expiratory Volumne (FEV)",
+       y = "Body Mass Index (BMI)")
+
+#without quotes
+imputed |> 
+  filter(!is.na(fev_imp) & !is.na(bmi_imp)) |>
+  ggplot() +
+  stat_summary(mapping=aes(x=fev_imp, y=bmi_imp),
+               fun.min = min,
+               fun.max = max,
+               fun = median) +
+  labs(title = "Statistical Summary Graph of FEV by BMI",
+       x = "Forced Expiratory Volumne (FEV)",
+       y = "Body Mass Index (BMI)")
+
+#statistical summary graph of FEV by BMI Level
+imputed[!is.na("fev_imp") & !is.na("obesity_level")] |> 
+  ggplot() +
+  stat_summary(mapping=aes(x=obesity_level, y=fev_imp),
+               fun.min = min,
+               fun.max = max,
+               fun = median) +
+  labs(title = "Statistical Summary Graph of FEV by BMI Level",
+       x = "BMI Level",
+       y = "Forced Expiratory Volumne (FEV)")
+  
+#statistical summary graph of FEV by smoke/gas exposure category
+imputed[!is.na("fev_imp") & !is.na("smoke_gas_exposure")] |> 
+  ggplot() +
+  stat_summary(mapping=aes(x=smoke_gas_exposure, y=fev_imp),
+               fun.min = min,
+               fun.max = max,
+               fun = median) +
+  labs(title = "Statistical Summary Graph of FEV by Smoke/Gas Exposure",
+       x = "Smoke/Gas Exposure",
+       y = "Forced Expiratory Volumne (FEV)")
+```
+
+***##do we use BMI/obesity level??***
+
+***##remove quotes in !is.na for all code??***
+
+**Question 5:** A leaflet map showing the concentrations of PM2.5 mass in each of the CHS communities.
+
+```{r}
+#loading in leaflet library
+library(leaflet)
+
+leaflet() |> 
+  addProviderTiles('CartoDB.Positron') |>
+  addCircles(data=imputed, lat=~lat_imp, lng=~lon_imp, popup="pm25_mass_imp", opacity=1, fillOpacity=1, radius=5, color="pink") |>
+  addCircles(data=imputed, lat=~lat_imp, lng=~lon_imp, popup="townname_imp", opacity=1, fillOpacity=1, radius=7, color="darkgreen")
+
+#final answer
+leaflet() |> 
+  addProviderTiles('CartoDB.Positron') |>
+  addCircles(data=imputed, lat=~lat_imp, lng=~lon_imp, popup = ~paste(townname_imp, "<br>", "PM2.5 Concentration: ", pm25_mass, "µg/m³"), opacity=1, fillOpacity=1, radius=5, color="purple")
+```
+
+***##do I need to add title to leaflet??***
+
+**Question 6:** Choose a visualization to examine whether PM2.5 mass is associated with FEV.
+
+```{r}
+#scatterplot with linear regression line
+imputed[!is.na("pm25_mass_imp") & !is.na("fev_imp")] |> 
+ggplot(mapping=aes(x = pm25_mass_imp, y = fev_imp)) +
+  geom_point(alpha = 0.7, color = "darkgreen") +
+  geom_smooth(method = "lm", color = "pink", se = FALSE) +
+  labs(title = "Association between PM 2.5 Mass and FEV",
+       x = "PM2.5 Mass (µg/m³)",
+       y = "Forced Expiratory Volume (FEV)") +
+  theme_minimal()
+```
+
+***##do I need to put examination of association here or just visualization??***
+
+In the scatter plot of PM 2.5 mass and FEV, the regression line (pink) slopes downward. This suggests an inverse relationship between the two variables. In other words, higher PM 2.5 mass is associated with lower FEV.

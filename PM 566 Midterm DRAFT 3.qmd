@@ -1,0 +1,456 @@
+---
+title: "PM 566 Midterm DRAFT 3"
+author: "Erica Shin"
+format: html
+editor: visual
+embed-resources: true
+---
+
+## PM 566 Midterm DRAFT 3
+
+## 1. Introduction
+
+National Institutes of Health (NIH)
+
+Surveillance, Epidemiology, and End Results Program (SEER)
+
+SEER Incidence Data, 2000-2021: <https://seer.cancer.gov/statistics-network/>
+
+**Background**: Leukemia, a type of blood cancer characterized by the rapid growth of abnormal white blood cells in the bone marrow, is the leading cause of cancer in pediatric populations in the United States.
+
+The National Institutes of Health (NIH) collects cancer incidence data from population-based cancer registries covering approximately 47.9 percent of the US population in the Surveillance, Epidemiology, and End Results Program (SEER). The SEER registries collect data on patient demographics, primary tumor site, tumor morphology, stage at diagnosis, and first course of treatment, and they follow up with patients for vital status. My dataset focuses on specific variables within the SEER registries to closer examine trends in leukemia pediatric cases.
+
+**Formulated Question**: What demographic factors (e.g., sex, race, median income, age) are associated with the likelihood of survival in pediatric patients under age 10 diagnosed with malignant leukemia in the US?
+
+## 2. Methods
+
+NIH provides a statistical software tool (available for download on their website) called SEER\*Stat to access and analyze SEER data. Once I gained access to SEER\*Stat, I looked through the list of registries and curated my dataset by selecting specific variables I wanted to examine in a case listing session.
+
+My dataset comes from the specific NIH SEER registry called "Incidence - SEER Research Limited-Field Data, 22 Registries, Nov 2023 Sub (2000-2021) - Linked To County Attributes - Time Dependent (1990-2022) Income/Rurality, 1969-2022 Counties." I chose to create my dataset based off of this specific registry because it has the largest geographic coverage available - approximately 47.9% of the U.S. population (based on 2020 census).
+
+My dataset focuses on the following 13 variables:
+
+-   **Patient ID**: Integer identifier for each patient.
+
+-   **Sex**: Character variable indicating the patient's sex (e.g., "Female", "Male").
+
+-   **Race (Recode: White, Black, Other)**: Character variable representing the patient's race.
+
+-   **Race Ethnicity**: Character variable detailing the specific ethnicity of the patient.
+
+-   **Age (Recode with Single Ages and 90+)**: Character variable indicating the patient's age.
+
+-   **Age (Recode with \<1 Year Olds)**: Character variable representing age ranges.
+
+-   **Year of Diagnosis**: Integer indicating the year the patient was diagnosed.
+
+-   **Site (Recode ICD-O-3/WHO 2008)**: Character variable specifying the type of leukemia diagnosed.
+
+-   **Behavior Code (ICD-O-3)**: Character variable indicating the malignancy status.
+
+-   **Year of Death (Recode)**: Character variable denoting whether the patient is alive or the year of death.
+
+-   **Type of Reporting Source**: Character variable describing the source of the cancer data (e.g., hospital or clinic).
+
+-   **Median Household Income (Inflation Adjusted to 2022)**: Character variable representing the income bracket of the patient's household.
+
+-   **Rural-Urban Continuum Code**: Character variable indicating the population type of the area where the patient resides.
+
+The dataset leuk contains the following variables:
+
+Patient ID, Sex, Race, Ethnicity, Age, Age Range, Year of diagnosis, Leukemia site, Cancer level, Year of death, Type of Reporting Source, Median household income inflation adjusted to 2022, and Rural-Urban Continuum code.
+
+\[Variables\] Var1Name=Patient ID Var1DisplayType=Formatted Var2Name=Sex Var2DisplayType=Formatted Var3Name=Race recode (White, Black, Other) Var3DisplayType=Formatted Var4Name=Race/ethnicity Var4DisplayType=Formatted Var5Name=Age recode with single ages and 90+ Var5DisplayType=Formatted Var6Name=Age recode with \<1 year olds Var6DisplayType=Formatted Var7Name=Year of diagnosis Var7DisplayType=Formatted Var8Name=Site recode ICD-O-3/WHO 2008 Var8DisplayType=Formatted Var9Name=Behavior code ICD-O-3 Var9DisplayType=Formatted Var10Name=Year of death recode Var10DisplayType=Formatted Var11Name=Type of Reporting Source Var11DisplayType=Formatted Var12Name=Median household income inflation adj to 2022 Var12DisplayType=Formatted Var13Name=Rural-Urban Continuum Code Var13DisplayType=Formatted
+
+**Data exploration tools**: The following tools were used to explore the data. The dataset initially contained 26,916 observations by 13 variables (using the dim function). The function str() provided information about the types of variables contained in the dataset. There are a total of 2 integer variables and 11 character variables. Looked at dimensions (before and after cleaning/wrangling), structure, column names, head.
+
+-   **dim()**: Used to look at the dimensions of the initial dataset (26,916 observations by 13 variables).
+
+-   **str()**: Provided information about the types of variables contained in the initial dataset (2 integer and 11 character variables).
+
+-   **colnames()**: Provided information about the variable or column names.
+
+-   **head()** and **tail**(): Utilized to look at the first and last six observations.
+
+**Cleaning and wrangling**: To clean the data, I first renamed the columns to make the variable names simpler and easier to use for coding purposes. Then, I checked for any missing observations in the key variables. Only the variable for median income (med_income) had missing observations, so I filtered them out of my dataset.
+
+For my question of interest, I wanted to focus on the survival time for patients who had already passed away, so I filtered out observations that were categorized as "Alive at last contact" and only kept patients that have a year of death.
+
+Next, I noticed that the variables for year of death (year_death) and single ages (age) were character variables, so I converted them to numeric variables for easier calculations and visualizations. Finally, I created a new variable (surv) to calculate the survival time for each patient by subtracting the year of diagnosis from the year of death.
+
+```{r}
+#loading in libraries
+library(dplyr)
+library(ggplot2)
+library(stringr)
+library(knitr)
+library(kableExtra) #extra styling for tables
+
+#loading in dataset
+leuk <- read.csv("/Users/ericashin/Downloads/Pediatric Malignant Leukemia Cancer Cases in the US (2000-2021, Ages Under 10 Only).csv")
+
+### exploring leuk dataset
+dim(leuk)
+str(leuk)
+colnames(leuk)
+head(leuk)
+tail(leuk)
+
+#renaming variable column names
+leuk <- leuk |>
+  rename(id = Patient.ID,
+         sex = Sex,
+         race = Race.recode..White..Black..Other.,
+         eth = Race.ethnicity,
+         age = Age.recode.with.single.ages.and.90.,
+         age_range = Age.recode.with..1.year.olds,
+         year_dx = Year.of.diagnosis,
+         site = Site.recode.ICD.O.3.WHO.2008,
+         level = Behavior.code.ICD.O.3,
+         year_death = Year.of.death.recode,
+         med_income = Median.household.income.inflation.adj.to.2022,
+         rep_source = Type.of.Reporting.Source,
+         loc_type = Rural.Urban.Continuum.Code)
+
+#checking for missing observations in key variables
+mean(is.na(leuk$sex))
+mean(is.na(leuk$race))
+mean(is.na(leuk$med_income))
+mean(is.na(leuk$age))
+mean(is.na(leuk$age_range))
+
+leuk <- leuk |> filter(!is.na(med_income))
+
+#changing age from character to numeric variable
+leuk <- leuk |>
+  mutate(age = as.integer(sub(" years", "", age)))
+
+#converting year_death into numeric variable
+leuk$year_death <- as.numeric(as.character(leuk$year_death))
+#filtering out NA (cases that are still alive) and only keeping cases with year of death
+leuk <- leuk |>
+  filter(!is.na(year_death) & !is.na(year_dx))
+
+#creating new variable for survival time in years (called surv)
+leuk <- leuk |>
+  mutate(surv = year_death - year_dx)
+```
+
+```{r}
+#creating mode function
+get_mode <- function(x) {
+  uniq_x <- unique(x[!is.na(x)])  #removing NA values
+  uniq_x[which.max(tabulate(match(x, uniq_x)))]  #finding mode
+}
+
+#summary statistics for cancer sites
+summary_stats_site <- leuk |>
+  group_by(site) |>
+  summarize(
+    Count = n(),
+    Mean = mean(surv, na.rm = TRUE),
+    Median = median(surv, na.rm = TRUE),
+    SD = sd(surv, na.rm = TRUE),
+    .groups = 'drop'
+  )
+
+#summary statistics for race
+sum_race <- leuk |>
+  group_by(race) |>
+  summarize(
+    Count = n(),
+    Mean = mean(surv, na.rm = TRUE),
+    Median = median(surv, na.rm = TRUE),
+    SD = sd(surv, na.rm = TRUE),
+    .groups = 'drop'
+  )
+
+#summary statistics for sex
+sum_sex <- leuk |>
+  group_by(sex) |>
+  summarize(
+    Count = n(),
+    Mean = mean(surv, na.rm = TRUE),
+    Median = median(surv, na.rm = TRUE),
+    SD = sd(surv, na.rm = TRUE),
+    .groups = 'drop'
+  )
+
+#summary statistics for race and sex
+sum_race_sex <- leuk |>
+  group_by(race, sex) |>
+  summarize(
+    Count = n(),
+    Mean = mean(surv, na.rm = TRUE),
+    Median = median(surv, na.rm = TRUE),
+    SD = sd(surv, na.rm = TRUE),
+    .groups = 'drop'
+  )
+
+#summary statistics for age
+sum_age <- leuk |>
+  group_by(age) |>
+  summarize(
+    Count = n(),
+    Mean = mean(surv, na.rm = TRUE),
+    Median = median(surv, na.rm = TRUE),
+    SD = sd(surv, na.rm = TRUE),
+    .groups = 'drop'
+  )
+
+#summary statistics for age range
+sum_age_range <- leuk |>
+  group_by(age, age_range) |>
+  summarize(
+    Count = n(),
+    Mean = mean(surv, na.rm = TRUE),
+    Median = median(surv, na.rm = TRUE),
+    SD = sd(surv, na.rm = TRUE),
+    .groups = 'drop'
+  )
+
+#summary statistics for median income
+
+#defining a specific order for the income ranges
+income_levels <- c("< $40,000", "$40,000 - $44,999", "$45,000 - $49,999", "$50,000 - $54,999", 
+                   "$55,000 - $59,999", "$60,000 - $64,999", "$65,000 - $69,999", "$70,000 -   $74,999", "$75,000 - $79,999", "$80,000 - $84,999", "$85,000 - $89,999", "$90,000 - $94,999", "$95,000 - $99,999", "$100,000 - $109,999", "$110,000 - $119,999", "$120,000+")
+
+#converting med_income to a factor with defined levels
+leuk <- leuk |>
+  mutate(med_income = factor(med_income, levels = income_levels, ordered = TRUE))
+
+#summary statistics for survival times by median income, sorted by factor levels
+sum_med_income <- leuk |>
+  group_by(med_income) |>
+  summarize(
+    Count = n(),
+    Mean = mean(surv, na.rm = TRUE),
+    Median = median(surv, na.rm = TRUE),
+    SD = sd(surv, na.rm = TRUE),
+    .groups = 'drop'
+  ) |>
+  arrange(desc(med_income))  #sorting by the ordered factor
+
+#displaying the summary statistics table for median income
+kable(sum_med_income, 
+      caption = "Summary Statistics of Survival Times by Median Income", 
+      align = 'c',
+      col.names = c("Median Income Range", "Count of Patients", "Average Survival (Years)", "Median Survival (Years)", "Standard Deviation")) |>
+  kable_styling(full_width = FALSE, position = "left", font_size = 12)
+
+#displaying summary statistics tables for other variables
+kable(summary_stats_site, caption = "Summary Statistics of Survival Times by Cancer Site", 
+      col.names = c("Cancer Site", "Count of Patients", "Average Survival (Years)", "Median Survival (Years)", "Standard Deviation")) |>
+  kable_styling(full_width = F, position = "left")
+
+kable(sum_race, caption = "Summary Statistics of Survival Times by Race", 
+      col.names = c("Race", "Count of Patients", "Average Survival (Years)", "Median Survival (Years)", "Standard Deviation")) |>
+  kable_styling(full_width = F, position = "left")
+
+kable(sum_sex, caption = "Summary Statistics of Survival Times by Sex", 
+      col.names = c("Sex", "Count of Patients", "Average Survival (Years)", "Median Survival (Years)", "Standard Deviation")) |>
+  kable_styling(full_width = F, position = "left")
+
+kable(sum_race_sex, caption = "Summary Statistics of Survival Times by Race and Sex", 
+      col.names = c("Race", "Sex", "Count of Patients", "Average Survival (Years)", "Median Survival (Years)", "Standard Deviation")) |>
+  kable_styling(full_width = F, position = "left")
+
+kable(sum_age_range, caption = "Summary Statistics of Survival Times by Age Range", 
+      col.names = c("Age", "Age Range", "Count of Patients", "Average Survival (Years)", "Median Survival (Years)", "Standard Deviation")) |>
+  kable_styling(full_width = F, position = "left")
+
+###histogram of median income by average survival time
+sum_med_income |>
+  ggplot(mapping=aes(x = med_income, y = Mean, fill = med_income)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Histogram of Median Income by Average Survival Time (Years)",
+       x = "Median Income",
+       y = "Average Survival Time (Years)") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_x_discrete(labels = function(x) str_wrap(x, width = 10)) #wrapping x-axis labels
+
+sum_race_sex |>
+  ggplot(mapping=aes(x = sex, y = Mean, fill = sex)) +
+  geom_bar(stat = "identity") +
+  facet_wrap(~race) +
+  labs(title = "Histogram of Sex and Race by Average Survival Time (Years)",
+       x = "Sex",
+       y = "Average Survival Time (Years)") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_x_discrete(labels = function(x) str_wrap(x, width = 10)) #wrapping x-axis labels
+
+###Histogram of Sex and Race by Average Survival Time (Years)
+sum_race_sex |>
+  ggplot(mapping=aes(x = race, y = Mean, fill = sex)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Histogram of Sex and Race by Average Survival Time (Years)",
+       x = "Sex",
+       y = "Average Survival Time (Years)") +
+  theme_minimal() +
+  scale_x_discrete(labels = function(x) str_wrap(x, width = 10)) #wrapping x-axis labels
+
+###Histogram of Age and Age Range by Average Survival Time (Years)***
+sum_age_range |>
+  ggplot(mapping=aes(x = age, y = Mean, fill = age_range)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Histogram of Age by Average Survival Time (Years)",
+       x = "Age",
+       y = "Average Survival Time (Years)",
+       fill = "Age Range") +
+  theme_minimal()
+
+#summary
+leuk |>
+  group_by(sex) |>
+  summarize(
+    mean_dx = mean(year_dx, na.rm = TRUE),
+    mode_dx = get_mode(year_dx),
+    mean_age = mean(age, na.rm = TRUE),
+    mode_age_range = get_mode(age_range),
+    mode_race = get_mode(race),
+    mode_income = get_mode(med_income),
+    mode_site = get_mode(site),
+    mode_level = get_mode(level),
+    total_obs = n()
+  )
+
+table(leuk$site)
+table(leuk$age_range)
+table(leuk$level)
+table(leuk$race)
+
+summary(leuk$year_dx)
+summary(leuk$age)
+
+### VISUALIZATIONS
+
+
+
+###scatter plot of median income by average survival time***
+sum_med_income |>
+  filter(!is.na(med_income)) |>
+  ggplot(mapping=aes(x=med_income, y=Mean)) +
+  geom_point() +
+  labs(title = "Scatter Plot of Median Income by Average Survival Time (Years)",
+       x = "Median Income",
+       y = "Average Survival Time (Years)") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_x_discrete(labels = function(x) str_wrap(x, width = 10)) #wrapping x-axis labels
+
+###histogram of race and sex by average survival time***
+sum_race_sex |>
+  filter(!is.na(race) & !is.na(sex)) |>
+  ggplot(mapping=aes(x=sex, y=Mean, fill=sex)) +
+  geom_bar(stat = "identity") +
+  facet_wrap(~ race, labeller = label_wrap_gen(width = 35)) +
+  labs(title = "Histogram of Sex and Race by Average Survival Time (Years)",
+       x = "Sex",
+       y = "Average Survival Time (Years)",
+       fill = "Sex") +
+  scale_x_discrete(labels = function(x) str_wrap(x, width = 10)) #wrapping x-axis labels
+
+###Histogram of Average Survival Time (Years) by Sex***
+leuk |>
+  ggplot(mapping=aes(x = sex, y = surv, fill = sex)) +
+  geom_bar(stat = "summary", fun = "mean") +
+  labs(title = "Histogram of Average Survival Time (Years) by Sex",
+       x = "Sex",
+       y = "Average Survival Time (Years)",
+       fill = "Sex") +
+  theme_minimal() +
+  scale_fill_discrete(labels = function(x) str_wrap(x, width = 5)) #wrapping text in legend
+
+###barplot of average survival time by sex, race, and age-range***
+leuk |>
+  ggplot(mapping=aes(x = sex, y = surv, fill = age_range)) +
+  geom_bar(stat = "summary", fun = "mean") +
+  facet_wrap(~ race, labeller = label_wrap_gen(width = 35)) +
+  labs(title = "Average Survival Time by Sex, Race, and Age-Range",
+       x = "Sex",
+       y = "Average Survival Time (Years)",
+       fill = "Age Range") +
+  theme_minimal() +
+  scale_fill_discrete(labels = function(x) str_wrap(x, width = 5)) #wrapping text in legend
+
+#line plot of average survival time by age of diagnosis and race***
+ggplot(avg_survival, aes(x = age, y = avg_survival, color = race, group = race)) +
+  geom_line(size = 1) +
+  geom_point(size = 2) +
+  labs(title = "Average Survival Time by Age of Diagnosis and Race",
+       x = "Age of Diagnosis (Years)",
+       y = "Average Survival Time (Years)",
+       color = "Race") +
+  theme_minimal() +
+  scale_color_discrete(labels = function(x) str_wrap(x, width = 5)) #wrapping text in legend
+
+# Calculate average survival time by race and cancer site***
+avg_survival_site <- leuk |> 
+  group_by(race, site) |> 
+  summarize(avg_surv = mean(surv, na.rm = TRUE), .groups = 'drop')
+
+# Create the bar plot
+ggplot(avg_survival_site, aes(x = reorder(race, avg_surv), y = avg_surv, fill = site)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Average Survival Time by Cancer Site",
+       x = "Cancer Site",
+       y = "Average Survival Time (Years)",
+       fill = "Cancer Site") +
+  theme_minimal() +
+  scale_x_discrete(labels = function(x) str_wrap(x, width = 5)) #wrapping text in x-axis
+
+```
+
+-   **Demographic Analysis**:
+
+    -   "How do age, sex, and race influence the diagnosis and survival rates of different cancer types in the dataset?"
+
+-   **Income Impact**:
+
+    -   "Is there a correlation between median income levels and the type of cancer diagnosed among patients?"
+
+-   **Geographic Variation**:
+
+    -   "How do cancer diagnosis rates vary by geographic location (loc_type) and what role does socioeconomic status (med_income) play in these differences?"
+
+-   **Temporal Trends**:
+
+    -   "What are the trends in cancer diagnosis year over year (year_dx) across different demographics (age_range, sex, race) within the dataset?"
+
+-   **Survival Analysis**:
+
+    -   "What factors (age_range, sex, race, site of cancer) are associated with the likelihood of survival (year_death) in patients diagnosed with malignant tumors?"
+
+## Introduction
+
+```{r}
+
+```
+
+## Methods
+
+```{r}
+
+```
+
+## Preliminary Results
+
+```{r}
+
+```
+
+## Conclusion
+
+```{r}
+
+```
+
+## ECHO
+
+```{r}
+#| echo: false
+2 * 2
+```
+
+The `echo: false` option disables the printing of code (only output is displayed).

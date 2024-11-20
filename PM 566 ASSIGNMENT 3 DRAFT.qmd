@@ -1,0 +1,236 @@
+---
+title: "PM 566 Assignment 3 DRAFT"
+author: "Erica Shin"
+format: html
+editor: visual
+embed-resources: true
+---
+
+## **Text Mining**
+
+A new dataset has been added to the data science data repository <https://github.com/USCbiostats/data-science-data/tree/master/03_pubmed>. The dataset contains 3,241 abstracts from articles collected via 5 PubMed searches. The search terms are listed in the second column, `term` and these will serve as the “documents.” Your job is to analyse these abstracts to find interesting insights.
+
+```{r}
+#install.packages("tidytext")
+library(tidytext)
+library(dplyr)
+library(ggplot2)
+library(forcats)
+library(textdata)
+library(stringr)
+
+pubmed <- read.csv("/Users/ericashin/Downloads/pubmed.csv")
+
+head(pubmed)
+colnames(pubmed)
+```
+
+1.  Tokenize the abstracts and count the number of each token. Do you see anything interesting? Does removing stop words change what tokens appear as the most frequent? What are the 5 most common tokens for each search term after removing stopwords?
+
+```{r}
+# Tokenizing abstracts and counting number of each token
+tokenize <- pubmed |>
+  unnest_tokens(token, abstract) |>
+  count(token, sort = TRUE) |>
+  top_n(20, n)
+
+tokenize |>
+  ggplot(aes(n, fct_reorder(token, n))) +
+  geom_col(fill="mediumpurple2") +
+  labs(title = "Top 20 Tokens from the Abstract",
+       x = "Count",
+       y = "Token") +
+  theme_minimal()
+
+# Removing stop words
+no_stop <- pubmed |>
+  unnest_tokens(token, abstract) |>
+  anti_join(stop_words, by = c("token" = "word")) |>
+  count(token, sort = TRUE) |>
+  top_n(20, n)
+
+no_stop |>
+  ggplot(aes(n, fct_reorder(token, n))) +
+  geom_col(fill="mediumpurple2") +
+  labs(title = "Top 20 Tokens from the Abstract (Without Stopwords)",
+       x = "Count",
+       y = "Token") +
+  theme_minimal()
+
+# Five most common tokens for each search term w/o stopwords
+
+# ignore this one
+pubmed|>
+  unnest_tokens(token, abstract) |>
+  anti_join(stop_words, by = c("token" = "word")) |>
+  group_by(term) |>
+  count(term, token, sort = TRUE) |>
+  top_n(5, n)
+
+# right answer
+common_term <- pubmed |>
+  unnest_tokens(token, term) |>
+  anti_join(stop_words, by = c("token" = "word")) |>
+  count(token, sort = TRUE) |>
+  slice_max(n, n = 5)
+
+common_term |>
+  ggplot(aes(n, fct_reorder(token, n))) +
+  geom_col(fill="mediumpurple2") +
+  labs(title = "5 Most Common Tokens for Each Search Term (Without Stopwords)",
+       x = "Count",
+       y = "Token") +
+  theme_minimal()
+```
+
+Removing stop words [does]{.underline} change what tokens appear as the most frequent. After removing stopwords, the 5 most common tokens for each search term include the following:
+
+-   covid
+
+-   prostrate
+
+-   cancer
+
+-   preelampsia
+
+-   fibrosis (tied)
+
+-   cystic (tied)
+
+2.  Tokenize the abstracts into bigrams. Find the 10 most common bigrams and visualize them with ggplot2.
+
+```{r}
+# Tokenize into bigrams
+bigram <- pubmed |>
+  unnest_ngrams(ngram, abstract, n=2) |>
+  count(ngram, sort=TRUE) |>
+  slice_max(n, n = 10)
+
+bigram |>
+  ggplot(aes(n, fct_reorder(ngram, n))) +
+  geom_col(fill="mediumpurple2") +
+  labs(title = "10 Most Common Bigrams",
+       x = "Count",
+       y = "Token") +
+  theme_minimal()
+```
+
+3.  Calculate the TF-IDF value for each word-search term combination (here you want the search term to be the “document”). What are the 5 tokens from each search term with the highest TF-IDF value? How are the results different from the answers you got in question 1?
+
+```{r}
+tfidf <- pubmed |>
+  unnest_tokens(abstract, abstract) |>
+  count(abstract, term) |>
+  bind_tf_idf(abstract, term, n) |>
+  arrange(desc(tf_idf)) 
+
+top_tfidf <- tfidf |>
+  arrange(desc(tf_idf)) |>
+  slice_head(n = 5)
+
+```
+
+## **Sentiment Analysis**
+
+1.  Perform a sentiment analysis using the NRC lexicon. What is the most common sentiment for each search term? What if you remove `"positive"` and `"negative"` from the list?
+
+```{r}
+# NRC lexicon
+get_sentiments('nrc')
+
+# Sentiment analysis using NRC lexicon
+pubmed_nrc <- pubmed |>
+  unnest_tokens(word, abstract) |>
+  inner_join(get_sentiments('nrc'), by="word", relationship="many-to-many")
+
+# Most common sentiment for each search term
+pubmed |>
+  unnest_tokens(word, abstract) |>
+  inner_join(get_sentiments('nrc'), relationship="many-to-many") |>
+  group_by(term) |>
+  summarise(sentiment = names(which.max(table(sentiment))))
+
+## Other method with count
+sent_nrc <- pubmed_nrc |>
+  group_by(term, sentiment) |>
+  summarize(count = n(), .groups = 'drop') |>
+  distinct(term, sentiment, count) |>
+  group_by(term) |>
+  slice_max(count, n = 1)
+
+sent_nrc
+
+# Removing positive and negative
+nrc_fun <- get_sentiments('nrc')
+nrc_fun <- nrc_fun[!nrc_fun$sentiment %in% c('positive', 'negative'), ]
+
+pubmed |>
+  unnest_tokens(word, abstract) |>
+  inner_join(nrc_fun, relationship="many-to-many") |>
+  group_by(term) |>
+  summarise(sentiment = names(which.max(table(sentiment))))
+```
+
+2.  Now perform a sentiment analysis using the AFINN lexicon to get an average positivity score for each abstract (hint: you may want to create a variable that indexes, or counts, the abstracts). Create a visualization that shows these scores grouped by search term. Are any search terms noticeably different from the others?
+
+```{r}
+# AFinn lexicon
+get_sentiments('afinn')
+
+# Sentiment analysis using AFINN lexicon
+pubmed_afinn <- pubmed |>
+  unnest_tokens(word, abstract) |>
+  inner_join(get_sentiments('afinn'), by="word", relationship="many-to-many")
+
+sent_afinn <- pubmed_afinn |>
+  group_by(term, sentiment) |>
+  summarize(sentiment = mean(value)) |>
+  distinct(term, sentpubiment) |>
+  slice_max(count, n = 1)
+
+# Second attempt
+pubmed |>
+  unnest_tokens(word, abstract) |>
+  inner_join(get_sentiments('afinn'), by='word') |>
+  group_by(term) |>
+  summarise(sentiment = mean(value, na.rm=TRUE))
+
+# right answer?
+pubmed_sent <- pubmed |>
+  mutate(abstract_index = row_number()) |>
+  unnest_tokens(word, abstract) |>
+  inner_join(get_sentiments("afinn"), by = "word") |>
+  group_by(abstract_index, term) |>
+  summarize(average_score = mean(value, na.rm = TRUE), .groups = "drop") |>
+  ungroup()
+
+# Visualization of scores grouped by search term
+pubmed_sent |>
+  ggplot(aes(x = term, y = average_score)) +
+  geom_boxplot(fill = "mediumpurple2") +
+  labs(title = "Sentiment Scores by Search Term", 
+       x = "Search Term", 
+       y = "Average Sentiment Score") +
+  theme_minimal() +
+   theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1)) +
+  scale_x_discrete(labels = function(x) str_wrap(x, width = 10))
+
+
+
+# Other attempts
+pubmed_sent_sorted <- pubmed_sent |>
+  arrange(abstract_index)
+
+barplot(pubmed_sent$average_score, names.arg = pubmed_sent$term)
+
+
+ggplot(scores_by_term, aes(x = term, y = avg_score)) +
+  geom_boxplot(fill = "mediumpurple2") +
+  labs(
+    title = "Average Positivity Scores by Search Term",
+    x = "Search Term",
+    y = "Average Positivity Score"
+  ) +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5))
+```

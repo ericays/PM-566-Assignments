@@ -1,0 +1,751 @@
+---
+title: "PM 566 Midterm DRAFT"
+author: "Erica Shin"
+format: html
+editor: visual
+embed-resources: true
+---
+
+## PM 566 Midterm *DRAFT*
+
+Dataset from NIH National Childhood Cancer Registry (NCCR): [https://nccrexplorer.ccdi.cancer.gov](#0)
+
+```{r}
+#loading in libraries
+library(dplyr)
+library(ggplot2)
+
+#loading in dataset
+nccr <- read.csv("/Users/ericashin/Downloads/nccr_explorer_download_10_17_2024.csv")
+
+tb <- read.csv("/Users/ericashin/Downloads/TB_burden_age_sex_2024-10-18.csv")
+
+cdi <- read.csv("/Users/ericashin/Downloads/U.S._Chronic_Disease_Indicators__CDI___2023_Release.csv")
+
+cos <- read.csv("/Users/ericashin/Downloads/cscpopendata.csv")
+
+cdi2 <- read.csv("/Users/ericashin/Downloads/U.S._Chronic_Disease_Indicators.csv")
+
+aging <- read.csv("/Users/ericashin/Downloads/Alzheimer_s_Disease_and_Healthy_Aging_Data.csv")
+
+alc <- read.csv("/Users/ericashin/Downloads/pcyr1970-2022.txt")
+
+vac <- read.csv("/Users/ericashin/Downloads/vaccine-progress-dashboard-8jn8lk/statewide-covid-19-vaccines-administered-by-county.csv")
+
+#likely to use
+covid <- read.csv("/Users/ericashin/Downloads/Conditions_Contributing_to_COVID-19_Deaths__by_State_and_Age__Provisional_2020-2023.csv")
+
+cancer <- read.csv("/Users/ericashin/Downloads/ca-oshpd-cancer-surgeries-gachospitals-20132022_odp1c.csv")
+
+namcs <- readRDS("/Users/ericashin/Downloads/namcshc2022_r.rds")
+
+seer <- read.csv("/Users/ericashin/Downloads/Pediatric Cancer Cases in the US (2000-2021, Ages Below 10 Only).csv")
+
+#creating mode function
+get_mode <- function(x) {
+  uniq_x <- unique(x[!is.na(x)])  #removing NA values
+  uniq_x[which.max(tabulate(match(x, uniq_x)))]  #finding mode
+}
+
+### exploring seer dataset
+dim(seer)
+str(seer)
+colnames(seer)
+head(seer)
+
+#renaming variable column names
+seer <- seer |>
+  rename(id = Patient.ID,
+         age_range = Age.recode.with..1.year.olds,
+         sex = Sex,
+         race = Race.recode..White..Black..Other.,
+         year_dx = Year.of.diagnosis,
+         site = Site.recode.ICD.O.3.WHO.2008,
+         level = Behavior.code.ICD.O.3,
+         year_death = Year.of.death.recode,
+         med_income = Median.household.income.inflation.adj.to.2022,
+         rep_source = Type.of.Reporting.Source,
+         loc_type = Rural.Urban.Continuum.Code)
+
+seer |>
+  group_by(sex) |>
+  summarize(
+    mean_deaths = mean(year_death, na.rm = TRUE),
+    mode_age = get_mode(age_range),
+    mode_race = get_mode(race),
+    mode_income = get_mode(med_income),
+    mode_site = get_mode(site),
+    mode_level = get_mode(level),
+    total_obs = n()
+  )
+
+table(seer$site)
+table(seer$age_range)
+
+### exploring covid dataset
+dim(covid)
+str(covid)
+colnames(covid)
+head(covid)
+
+covid |>
+  group_by(Condition.Group) |>
+  summarize(
+    mean_deaths = mean(COVID.19.Deaths, na.rm = TRUE),
+    mode_age = get_mode(Age.Group),
+    mode_state = get_mode(State),
+    total_obs = n()
+  )
+
+covid |>
+  group_by(Age.Group) |>
+  summarize(
+    mean_deaths = mean(COVID.19.Deaths, na.rm = TRUE),
+    mode_cgroup = get_mode(Condition.Group),
+    mode_state = get_mode(State),
+    total_obs = n()
+  )
+
+#creating smaller subset of data - only California
+ca <- covid |> filter(State == "California")
+
+#ca <- covid |> filter(State == "California") |> select(Your_Column_Names)
+
+#exploring key variables
+table(covid$State)
+table(covid$Condition)
+
+```
+
+```{r}
+#loading in libraries
+library(dplyr)
+library(ggplot2)
+
+#loading in dataset
+seer <- read.csv("/Users/ericashin/Downloads/Pediatric Cancer Cases in the US (2000-2021, Ages Below 10 Only).csv")
+
+#creating mode function
+get_mode <- function(x) {
+  uniq_x <- unique(x[!is.na(x)])  #removing NA values
+  uniq_x[which.max(tabulate(match(x, uniq_x)))]  #finding mode
+}
+
+### exploring seer dataset
+dim(seer)
+str(seer)
+colnames(seer)
+head(seer)
+
+#renaming variable column names
+seer <- seer |>
+  rename(id = Patient.ID,
+         age_range = Age.recode.with..1.year.olds,
+         sex = Sex,
+         race = Race.recode..White..Black..Other.,
+         year_dx = Year.of.diagnosis,
+         site = Site.recode.ICD.O.3.WHO.2008,
+         level = Behavior.code.ICD.O.3,
+         year_death = Year.of.death.recode,
+         med_income = Median.household.income.inflation.adj.to.2022,
+         rep_source = Type.of.Reporting.Source,
+         loc_type = Rural.Urban.Continuum.Code)
+
+seer |>
+  group_by(sex) |>
+  summarize(
+    mean_dx = mean(year_dx, na.rm = TRUE),
+    mode_dx = get_mode(year_dx),
+    mode_age = get_mode(age_range),
+    mode_race = get_mode(race),
+    mode_income = get_mode(med_income),
+    mode_site = get_mode(site),
+    mode_level = get_mode(level),
+    total_obs = n()
+  )
+
+table(seer$site)
+table(seer$age_range)
+table(seer$level)
+table(seer$race)
+
+summary(seer$year_dx)
+summary(seer$age_range)
+
+trends <- seer|>
+  group_by(year_dx, age_range, sex, race) |>
+  summarize(count = n(), .groups = 'drop') 
+
+trend_dx <- seer|>
+  group_by(year_dx) |>
+  summarize(count = n(), .groups = 'drop')
+
+trend_age <- seer|>
+  group_by(age_range) |>
+  summarize(count = n(), .groups = 'drop')
+
+trend_sex <- seer|>
+  group_by(sex) |>
+  summarize(count = n(), .groups = 'drop')
+
+trend_race <- seer|>
+  group_by(race) |>
+  summarize(count = n(), .groups = 'drop')
+
+survival_summary <- seer |>
+  group_by(age_range) |>
+  summarize(survival_rate = mean(!is.na(year_death)), .groups = 'drop')
+
+#converting year_death into numeric variable
+seer$year_death <- as.numeric(as.character(seer$year_death))
+#filtering out NA (cases that are still alive) and only keeping cases with year of death
+seer <- seer |>
+  filter(!is.na(year_death) & !is.na(seer$year_dx))
+
+#creating new variable for survival time (called surv)
+seer <- seer |>
+  mutate(surv = year_death - year_dx)
+
+seer[seer$surv > 10, ]
+
+#sum(is.na(seer$year_death)) --> checking for total number of missings
+
+seer |>
+  ggplot(mapping=aes(x=year_dx, y=surv, color=race)) +
+  geom_point()
+
+seer |>
+  ggplot(mapping=aes(x = surv, fill = level)) +
+  geom_histogram(position = "stack", bins = 30, alpha = 0.7) +
+  labs(title = "Survival Time (Years) by Cancer Level",
+       x = "Survival Time (Years)",
+       y = "Count",
+       fill = "Cancer Level")
+
+seer |>
+  ggplot(mapping=aes(x = surv, fill = age_range)) +
+  geom_histogram(position = "stack", bins = 30, alpha = 0.7)
+
+
+#statistical summary graph
+library(stringr)
+
+seer |>
+  ggplot() +
+  stat_summary(mapping=aes(x=race, y=surv),
+               fun.min = min,
+               fun.max = max,
+               fun = mean) +
+  labs(title = "Statistical Summary Graph of Race by Survival Time (Years)",
+       x = "Race",
+       y = "Survival Time (Years)") +
+  scale_x_discrete(labels = function(x) str_wrap(x, width = 10)) #wrapping x-axis labels
+
+#facet wrapping
+ggplot(trends, aes(x = year_dx, y = count, color = age_range)) +
+  geom_line() +
+  facet_wrap(~ sex + race) +
+  labs(title = "Trends in Cancer Diagnosis by Year and Demographics",
+       x = "Year of Diagnosis",
+       y = "Count of Diagnoses")
+
+ggplot(trends, aes(x = year_dx, y = count, color = race)) +
+  geom_line() +
+  facet_wrap(~ sex + age_range) +
+  labs(title = "Trends in Cancer Diagnosis by Year and Demographics",
+       x = "Year of Diagnosis",
+       y = "Count of Diagnoses") +
+  scale_fill_discrete(labels = function(x) str_wrap(x, width = 5)) #wrapping text in legend
+
+library(data.table)
+seer1 <- as.data.table(seer) |>
+  mutate(surv = year_death - year_dx)
+
+seer1 <- seer1[, .(
+  surv_avg = mean(surv, na.rm = TRUE)), 
+  by = race]
+
+seer |>
+  group_by(race) |>
+  summarize(
+    age_range = age_range,
+    sex = sex,
+    race = race,
+    year_dx = year_dx,
+    level = level,
+    year_death = year_death,
+    med_income = med_income,
+    surv = surv,
+    surv_avg = mean(surv, na.rm = TRUE),
+    count = n()
+  )
+
+seer |>
+  ggplot(mapping=aes(x = sex, y = surv, fill = med_income)) +
+  geom_bar(stat="identity") +
+  facet_wrap(~ race, labeller = labeller(race = function(x) str_wrap(x, width = 15))) +
+  labs(title = "Trends in Survival Time by Sex, Race, and Median Income",
+       x = "Sex",
+       y = "Survival Time (Years)") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_x_discrete(labels = function(x) str_wrap(x, width = 10)) #wrapping x-axis labels
+
+seer |>
+  ggplot(mapping=aes(x = year_dx, y = surv, fill = med_income)) +
+  geom_bar() +
+  facet_wrap(~ race, labeller = labeller(race = function(x) str_wrap(x, width = 15))) +
+  labs(title = "Barchart of Average BMI by Smoke/Gas Exposure",
+       x = "Smoke/Gas Exposure",
+       y = "Count",
+       fill = "Smoke/Gas Exposure Levels") +
+  theme_minimal()
+
+#boxplot of survival time by race
+seer |>
+  ggplot(mapping=aes(x = race, y = surv)) +
+  geom_boxplot(fill = "skyblue") +
+  labs(title = "Boxplot of Survival Time (Years) by Race",
+       x = "Race",
+       y = "Survival Time (Years)") +
+  theme_minimal()
+
+#violin plot of survival time by sex
+seer |>
+  ggplot(mapping=aes(x = sex, y = surv)) +
+  geom_violin(fill = "lightgreen") +
+  labs(title = "Violin Plot of Survival Time (Years) by Sex",
+       x = "Sex",
+       y = "Survival Time (Years)") +
+  theme_minimal()
+
+#scatter plot of year of diagnosis by survival time
+seer |>
+  ggplot(mapping=aes(x = year_dx, y = surv)) +
+  geom_jitter(width = 0.2, height = 0, alpha = 0.5, color = "blue") +
+  labs(title = "Scatter Plot of Year of Diagnosis by Survival Time (Years)",
+       x = "Race",
+       y = "Survival Time (Years)") +
+  theme_minimal()
+
+seer |>
+  ggplot(mapping=aes(x = age_range, y = surv, fill = age_range)) +
+  geom_bar(stat = "identity") +
+  facet_wrap(~ race + sex) +
+  labs(title = "Facet Grid by Category 1",
+       x = "Category 2",
+       y = "Count") +
+  theme_minimal()
+
+ggplot(trends, aes(x = year_dx, y = count, color = age_range)) +
+  geom_line() +
+  facet_wrap(~ sex + race) +
+  labs(title = "Trends in Cancer Diagnosis by Year and Demographics",
+       x = "Year of Diagnosis",
+       y = "Count of Diagnoses") +
+  scale_fill_discrete(labels = function(x) str_wrap(x, width = 5)) #wrapping text in legend
+
+trend_brain <- seer |>
+  filter(site == "Brain") |>
+  group_by(year_dx) |>
+  summarize(count = n(), .groups = 'drop')
+
+trend_brain |>
+  ggplot(mapping=aes(x=year_dx, y=count)) +
+  geom_point() +
+  labs(title = "Scatterplot of Brain Cancer Diagnoses by Year",
+       x = "Year of Diagnosis",
+       y = "Brain Cancer Cases (Count)") +
+  theme_minimal()
+```
+
+```{r}
+#loading in libraries
+library(dplyr)
+library(ggplot2)
+library(stringr)
+library(knitr)
+
+#loading in dataset
+leuk <- read.csv("/Users/ericashin/Downloads/Pediatric Malignant Leukemia Cancer Cases in the US (2000-2021, Ages Under 10 Only).csv")
+
+#creating mode function
+get_mode <- function(x) {
+  uniq_x <- unique(x[!is.na(x)])  #removing NA values
+  uniq_x[which.max(tabulate(match(x, uniq_x)))]  #finding mode
+}
+
+### exploring leuk dataset
+dim(leuk)
+str(leuk)
+colnames(leuk)
+head(leuk)
+
+#renaming variable column names
+leuk <- leuk |>
+  rename(id = Patient.ID,
+         sex = Sex,
+         race = Race.recode..White..Black..Other.,
+         eth = Race.ethnicity,
+         age = Age.recode.with.single.ages.and.90.,
+         age_range = Age.recode.with..1.year.olds,
+         year_dx = Year.of.diagnosis,
+         site = Site.recode.ICD.O.3.WHO.2008,
+         level = Behavior.code.ICD.O.3,
+         year_death = Year.of.death.recode,
+         med_income = Median.household.income.inflation.adj.to.2022,
+         rep_source = Type.of.Reporting.Source,
+         loc_type = Rural.Urban.Continuum.Code)
+
+#changing age from character to numeric variable
+leuk <- leuk |>
+  mutate(age = as.integer(sub(" years", "", age)))
+
+#converting year_death into numeric variable
+leuk$year_death <- as.numeric(as.character(leuk$year_death))
+#filtering out NA (cases that are still alive) and only keeping cases with year of death
+leuk <- leuk |>
+  filter(!is.na(year_death) & !is.na(year_dx))
+
+#creating new variable for survival time (called surv)
+leuk <- leuk |>
+  mutate(surv = year_death - year_dx)
+
+#summary statistics for cancer sites
+summary_stats_site <- leuk %>%
+  group_by(site) %>%
+  summarize(
+    Count = n(),
+    Mean = mean(surv, na.rm = TRUE),
+    Median = median(surv, na.rm = TRUE),
+    SD = sd(surv, na.rm = TRUE),
+    .groups = 'drop'
+  )
+
+#display summary statistics table
+kable(summary_stats_site, caption = "Summary Statistics of Survival Times by Cancer Site")
+
+#summary
+leuk |>
+  group_by(sex) |>
+  summarize(
+    mean_dx = mean(year_dx, na.rm = TRUE),
+    mode_dx = get_mode(year_dx),
+    mean_age = mean(age, na.rm = TRUE),
+    mode_age_range = get_mode(age_range),
+    mode_race = get_mode(race),
+    mode_income = get_mode(med_income),
+    mode_site = get_mode(site),
+    mode_level = get_mode(level),
+    total_obs = n()
+  )
+
+table(leuk$site)
+table(leuk$age_range)
+table(leuk$level)
+table(leuk$race)
+
+summary(leuk$year_dx)
+summary(leuk$age)
+
+#seeing trends
+trend_age <- seer|>
+  group_by(age_range) |>
+  summarize(count = n(), .groups = 'drop')
+
+trend_sex <- seer|>
+  group_by(sex) |>
+  summarize(count = n(), .groups = 'drop')
+
+trend_race <- seer|>
+  group_by(race) |>
+  summarize(count = n(), .groups = 'drop')
+
+trends <- leuk |>
+  group_by(year_dx, age, sex, race) |>
+  summarize(count = n(), .groups = 'drop') 
+
+trends |>
+  ggplot(mapping=aes(x=year_dx, y=count)) +
+  geom_point() +
+  labs(title = "Scatterplot of Brain Cancer Diagnoses by Year",
+       x = "Year of Diagnosis",
+       y = "Brain Cancer Cases (Count)") +
+  theme_minimal()
+
+### visualizations
+leuk |>
+  ggplot() +
+  stat_summary(mapping=aes(x=race, y=surv),
+               fun.min = min,
+               fun.max = max,
+               fun = mean) +
+  labs(title = "Statistical Summary Graph of Race by Survival Time (Years)",
+       x = "Race",
+       y = "Survival Time (Years)") +
+  scale_x_discrete(labels = function(x) str_wrap(x, width = 10)) #wrapping x-axis labels
+
+leuk |>
+  ggplot(mapping=aes(x = age, y = surv, fill = age_range)) +
+  geom_bar(stat = "identity") +
+  facet_wrap(~ race + sex) +
+  labs(title = "Facet Grid by Category 1",
+       x = "Category 2",
+       y = "Count") +
+  theme_minimal()
+
+leuk |>
+  ggplot(mapping=aes(x = age, y = surv)) +
+  geom_point() + 
+  labs(title = "Scatter Plot of Year of Diagnosis by Survival Time (Years)",
+       x = "Race",
+       y = "Survival Time (Years)") +
+  theme_minimal()
+
+ggplot(leuk, aes(x = age_range, y = surv)) +
+  geom_boxplot() +
+  labs(title = "Survival Time by Age Range",
+       x = "Age Range",
+       y = "Survival Time (Years)") +
+  theme_minimal()
+
+leuk |>
+  ggplot(mapping=aes(x = sex, y = surv, fill = race)) +
+  geom_bar(stat = "summary", fun = "mean") +
+  labs(title = "Average Survival Time by Sex and Race",
+       x = "Sex",
+       y = "Average Survival Time (Years)") +
+  theme_minimal() +
+  scale_fill_discrete(labels = function(x) str_wrap(x, width = 5)) #wrapping text in legend
+
+leuk |>
+  ggplot(mapping=aes(x = sex, y = surv, fill = race)) +
+  geom_bar(stat = "summary", fun = "mean") +
+  labs(title = "Average Survival Time by Sex and Race",
+       x = "Sex",
+       y = "Average Survival Time (Years)") +
+  theme_minimal() +
+  scale_fill_discrete(labels = function(x) str_wrap(x, width = 5)) #wrapping text in legend
+
+#barplot of average survival time by sex, race, and age-range
+leuk |>
+  ggplot(mapping=aes(x = sex, y = surv, fill = age_range)) +
+  geom_bar(stat = "summary", fun = "mean") +
+  facet_wrap(~ race) +
+  labs(title = "Average Survival Time by Sex, Race, and Age-Range",
+       x = "Sex",
+       y = "Average Survival Time (Years)") +
+  theme_minimal() +
+  scale_fill_discrete(labels = function(x) str_wrap(x, width = 5)) #wrapping text in legend
+
+leuk |> 
+  ggplot(mapping = aes(x = sex, y = surv, fill = med_income)) +
+  geom_bar(stat = "summary", fun = "mean", position = "dodge") +
+  facet_wrap(~ race) +
+  labs(title = "Average Survival Time by Sex and Median Income",
+       x = "Sex",
+       y = "Average Survival Time (Years)",
+       fill = "Median Income") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+leuk |> 
+  ggplot(mapping = aes(x = sex, y = surv, fill = med_income)) +
+  geom_bar(stat = "summary", fun = "mean", position = "dodge") +
+  facet_wrap(~ race) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+leuk |> 
+  ggplot(mapping = aes(x = surv, fill = sex)) +
+  geom_histogram(binwidth = 1, position = "dodge", color = "black", alpha = 0.7) +
+  facet_wrap(~ race) +
+  labs(title = "Distribution of Survival Time by Sex",
+       x = "Survival Time (Years)",
+       y = "Count",
+       fill = "Sex") +
+  theme_minimal()
+
+#calculating average survival time by age and race
+avg_survival <- leuk |> 
+  group_by(age, race) |> 
+  summarize(avg_survival = mean(surv, na.rm = TRUE), .groups = 'drop')
+
+#line plot of average survival time by age of diagnosis and race
+ggplot(avg_survival, aes(x = age, y = avg_survival, color = race, group = race)) +
+  geom_line(size = 1) +
+  geom_point(size = 2) +
+  labs(title = "Average Survival Time by Age of Diagnosis and Race",
+       x = "Age of Diagnosis (Years)",
+       y = "Average Survival Time (Years)",
+       color = "Race") +
+  theme_minimal() +
+  scale_color_discrete(labels = function(x) str_wrap(x, width = 5)) #wrapping text in legend
+
+# Calculate average survival time by median income, race, and sex
+avg_survival <- leuk |> 
+  group_by(med_income, race, sex) |> 
+  summarize(avg_survival = mean(surv, na.rm = TRUE), .groups = 'drop')
+
+# Create the boxplot
+ggplot(leuk, aes(x = sex, y = surv, fill = race)) +
+  geom_boxplot() +
+  facet_wrap(~ race) +
+  labs(title = "Distribution of Survival Time by Sex and Race",
+       x = "Sex",
+       y = "Survival Time (Years)",
+       fill = "Race") +
+  theme_minimal() +
+  scale_fill_discrete(labels = function(x) str_wrap(x, width = 5)) #wrapping text in legend
+
+# Calculate average survival time by median income, race, and sex
+avg_survival <- leuk |> 
+  group_by(site, race, sex) |> 
+  summarize(avg_survival = mean(surv, na.rm = TRUE), .groups = 'drop')
+
+# Create the boxplot
+ggplot(leuk, aes(x = sex, y = surv, fill = race)) +
+  geom_boxplot() +
+  facet_wrap(~ race) +
+  labs(title = "Distribution of Survival Time by Sex and Race",
+       x = "Sex",
+       y = "Survival Time (Years)",
+       fill = "Race") +
+  theme_minimal() +
+  scale_fill_discrete(labels = function(x) str_wrap(x, width = 5)) #wrapping text in legend
+
+# Calculate average survival time by race and site
+avg_survival <- leuk |> 
+  group_by(race, site, sex) |> 
+  summarize(avg_survival = mean(surv, na.rm = TRUE), .groups = 'drop')
+
+# Create the bar plot
+ggplot(avg_survival, aes(x = sex, y = avg_survival, fill = site)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Average Survival Time by Race Faceted by Site of Cancer",
+       x = "Race",
+       y = "Average Survival Time (Years)",
+       fill = "Race") +
+  facet_wrap(~ race) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+# Calculate average survival time by year of diagnosis, race, and sex
+avg_survival <- leuk |> 
+  group_by(year_dx, race, sex) |> 
+  summarize(avg_surv = mean(surv, na.rm = TRUE), .groups = 'drop')
+
+# Create the line plot
+ggplot(avg_survival, aes(x = year_dx, y = avg_surv, color = race)) +
+  geom_line(size = 1) +
+  geom_point(size = 2) +  
+  facet_wrap(~ sex) +
+  labs(title = "Average Survival Time by Year of Diagnosis, Race, and Sex",
+       x = "Year of Diagnosis",
+       y = "Average Survival Time (Years)",
+       color = "Race",
+       linetype = "Sex") +
+  theme_minimal() +
+  scale_color_discrete(labels = function(x) str_wrap(x, width = 5)) #wrapping text in legend
+
+ggplot(leuk, aes(x = site, y = surv, fill = site)) +
+  geom_boxplot() +
+  labs(title = "Survival Times by Type of Leukemia",
+       x = "Type of Leukemia",
+       y = "Survival Time (Years)",
+       fill = "Type of Leukemia") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+# Calculate average survival time by cancer site
+avg_survival_site <- leuk |> 
+  group_by(race, site) |> 
+  summarize(avg_surv = mean(surv, na.rm = TRUE), .groups = 'drop')
+
+# Create the bar plot
+ggplot(avg_survival_site, aes(x = reorder(race, avg_surv), y = avg_surv, fill = site)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Average Survival Time by Cancer Site",
+       x = "Cancer Site",
+       y = "Average Survival Time (Years)",
+       fill = "Cancer Site") +
+  theme_minimal() +
+  scale_x_discrete(labels = function(x) str_wrap(x, width = 5)) #wrapping text in x-axis
+
+# Calculate average survival time by median income
+avg_survival_site <- leuk |> 
+  group_by(race, med_income) |> 
+  summarize(avg_surv = mean(surv, na.rm = TRUE), .groups = 'drop')
+
+# Create the bar plot
+ggplot(avg_survival_site, aes(x = reorder(race, avg_surv), y = avg_surv, fill = med_income)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Average Survival Time by Median Income and Race",
+       x = "Race",
+       y = "Average Survival Time (Years)",
+       fill = "Median Income") +
+  theme_minimal() +
+  scale_x_discrete(labels = function(x) str_wrap(x, width = 5)) #wrapping text in x-axis
+
+# Create a boxplot for survival times by type of leukemia
+ggplot(leuk, aes(x = site, y = surv, fill = site)) +
+  geom_boxplot() +
+  labs(title = "Survival Times by Type of Leukemia",
+       x = "Type of Leukemia",
+       y = "Survival Time (Years)",
+       fill = "Type of Leukemia") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+-   **Demographic Analysis**:
+
+    -   "How do age, sex, and race influence the diagnosis and survival rates of different cancer types in the dataset?"
+
+-   **Income Impact**:
+
+    -   "Is there a correlation between median income levels and the type of cancer diagnosed among patients?"
+
+-   **Geographic Variation**:
+
+    -   "How do cancer diagnosis rates vary by geographic location (loc_type) and what role does socioeconomic status (med_income) play in these differences?"
+
+-   **Temporal Trends**:
+
+    -   "What are the trends in cancer diagnosis year over year (year_dx) across different demographics (age_range, sex, race) within the dataset?"
+
+-   **Survival Analysis**:
+
+    -   "What factors (age_range, sex, race, site of cancer) are associated with the likelihood of survival (year_death) in patients diagnosed with malignant tumors?"
+
+## Introduction
+
+```{r}
+
+```
+
+## Methods
+
+```{r}
+
+```
+
+## Preliminary Results
+
+```{r}
+
+```
+
+## Conclusion
+
+```{r}
+
+```
+
+## ECHO
+
+```{r}
+#| echo: false
+2 * 2
+```
+
+The `echo: false` option disables the printing of code (only output is displayed).
